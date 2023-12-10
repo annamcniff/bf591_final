@@ -1,32 +1,25 @@
-#
-# This is a Shiny web application. You can run the application by clicking
-# the 'Run App' button above.
-#
-# Find out more about building applications with Shiny here:
-#
-#    http://shiny.rstudio.com/
-#
-
 library(shiny)
-
+library(bslib)
+library(ggplot2)
+library(colourpicker) # you might need to install this
 library(shinydashboard)
+library(DT)
 
 ui <- dashboardPage(
-  dashboardHeader(title = "Basic dashboard"),
+  dashboardHeader(title = "Basic Bioinformatics App"),
   dashboardSidebar(sidebarMenu(
     menuItem("Dashboard", tabName = "dashboard", icon = icon("dashboard")),
-    menuItem("Sample Information", tabName = "Sample Information", icon = icon("th")),
-    menuItem("Counts Matrix Exploration", tabName = "Counts Matrix Exploration", icon = icon("th")),
-    menuItem("Differential Expression", tabName = "Differential Expression", icon = icon("th")),
-    menuItem("Gene Set Enrichment Analysis", tabName = "Gene Set Enrichment Analysis", icon = icon("th"))
-    )),
+    menuItem("Sample Information", tabName = "Sample_Information", icon = icon("th")),
+    menuItem("Counts Matrix Exploration", tabName = "counts", icon = icon("filter")),
+    menuItem("Differential Expression", tabName = "dex", icon = icon("sliders")),
+    menuItem("Gene Set Enrichment Analysis", tabName = "gsea", icon = icon("dna"))
+  )),
   dashboardBody(
     tabItems(
       # First tab content
       tabItem(tabName = "dashboard",
               fluidRow(
                 box(plotOutput("plot1", height = 250)),
-                
                 box(
                   title = "Controls",
                   sliderInput("slider", "Number of observations:", 1, 100, 50)
@@ -35,22 +28,59 @@ ui <- dashboardPage(
       ),
       
       # Second tab content
-      tabItem(tabName = "Sample Information",
-              h2("Add summary table")
+      tabItem(tabName = "Sample_Information",
+              tabBox(title = "Sample Information",
+                # The id lets us use input$tabset1 on the server to find the current tab
+                id = "SIhome", height = "250px",
+                tabPanel("input", fileInput("file", "Choose CSV File",
+                                            accept = c(".csv")),
+                         
+                         # Dynamic UI for radio buttons
+                         uiOutput("variable1_selector"),
+                         uiOutput("variable2_selector"),
+                         
+                         colourInput("color1", "Select Color for Significant", value = "darkgreen"),
+                         colourInput("color2", "Select Color for Non-Significant", value = "lightgrey"),
+                         
+                         sliderInput("slider", "Magnitude of adjusted p-value",
+                                     min = -300, max = 1, value = 1),
+                         
+                         # Action button to trigger plot and table generation
+                         actionButton("generateBtn", "Generate Plot and Table")),
+                tabPanel("table", tableOutput("table")),
+                tabPanel("summary", dataTableOutput("summary")),
+                tabPanel("plots", plotOutput("volcano"))
+              ),
       ),
-      tabItem(tabName = "Counts Matrix Exploration",
+      tabItem(tabName = "counts",
               h2("count matrix stuff")
       ),
-      tabItem(tabName = "Differential Expression",
+      tabItem(tabName = "dex",
               h2("Add Differential Expression")
       ),
-      tabItem(tabName = "Gene Set Enrichment Analysis",
+      tabItem(tabName = "gsea",
               h2("Add Gene Set Enrichment Analysis")
       )
     )
-),
+  )
+)
 
 server <- function(input, output) {
+  load_data <- reactive({
+    req(input$file)
+    data<-read.csv(input$file$datapath)
+    return(data)
+  })
+  # Dynamic UI for radio buttons
+  output$variable1_selector <- renderUI({
+    choices <- names(load_data())
+    radioButtons("variable1", "Choose the column for the x-axis", choices, selected = choices[1])
+  })
+  output$variable2_selector <- renderUI({
+    choices <- names(load_data())
+    radioButtons("variable2", "Choose the column for the y-axis", choices, selected = choices[1])
+  })
+  
   set.seed(122)
   histdata <- rnorm(500)
   
@@ -58,6 +88,67 @@ server <- function(input, output) {
     data <- histdata[seq_len(input$slider)]
     hist(data)
   })
+  
+  volcano_plot <-function(dataf, x_name, y_name, slider, color1, color2) {
+    req(x_name, y_name)
+    threshold <- 10^slider
+    ggplot(dataf, aes(x = !!sym(x_name), y = -log10(!!sym(y_name)), color = padj< threshold)) +
+      geom_point(size = 3) +
+      scale_color_manual(values = c(color1, color2), breaks = c(TRUE, FALSE), labels = c("significant", "not significant")) +
+      labs(title = "Volcano Plot",
+           x = x_name,
+           y = y_name,
+           color = y_name)
+  }
+  draw_table <- function(dataf, slider) {
+      req(dataf)
+      
+      # Filter data to rows with p-adjusted values less than 1 * 10^slider
+      filtered_data <- dataf[dataf$padj < 10^slider, ]
+      
+      # Exclude rows with more than one NA value
+      filtered_data <- filtered_data[rowSums(is.na(filtered_data)) <= 1, ]
+      
+      # Format p-value and p-adjusted value columns to display more digits
+      digits_to_display <- 10  # You can adjust the number of digits as needed
+      
+      filtered_data$pvalue <- formatC(filtered_data$pvalue, format = "f", digits = digits_to_display)
+      filtered_data$padj <- formatC(filtered_data$padj, format = "f", digits = digits_to_display)
+      
+      return(filtered_data)
+  }
+  
+  get_summary <- function(dataf) {
+    req(dataf)
+    dataf <- dataf[complete.cases(dataf), ]
+      num_rows <- nrow(dataf)
+      num_cols <- ncol(dataf)
+      
+      # Get the data types and unique values for each column
+      column_summaries <- lapply(names(dataf), function(col) {
+        col_summary <- c(
+          column_name = col,
+          data_type = typeof(dataf[[col]]),
+          unique_values = unique(dataf[[col]])
+        )
+        return(col_summary)
+      })
+      return(column_summaries)
+    }
+    
+    
+
+    
+    #' These outputs aren't really functions, so they don't get a full skeleton, 
+    #' but use the renderPlot() and renderTabel() functions to return() a plot 
+    #' or table object, and those will be displayed in your application.
+    output$volcano <- renderPlot(volcano_plot(load_data(), input$variable1, input$variable2, input$slider, input$color1, input$color2)) 
+
+    
+    # Same here, just return the table as you want to see it in the web page
+    output$table <- renderTable(draw_table(load_data(), input$slider)) 
+    #output$summary <- renderTable(get_summary(load_data(), input$slider))
+    output$summary <- renderTable({summary_data <- get_summary(load_data()) })
 }
 
 shinyApp(ui, server)
