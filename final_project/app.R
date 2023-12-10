@@ -50,16 +50,56 @@ ui <- dashboardPage(
                 tabPanel("table", tableOutput("table")),
                 tabPanel("summary", dataTableOutput("summary")),
                 tabPanel("plots", plotOutput("volcano"))
-              ),
+              )
       ),
       tabItem(tabName = "counts",
-              h2("count matrix stuff")
+              tabBox(title = "Counts Matrix",
+                     # The id lets us use input$tabset1 on the server to find the current tab
+                     id = "Count_home", height = "250px",
+                     tabPanel("input", fileInput("counts_file", "Choose CSV File",
+                                                 accept = c(".csv")),
+                              
+                              sliderInput("var_slider", "Minimum percent variance",
+                                          min = 0, max = 100, value = 1),
+                              sliderInput("non0slider", "Minimum non-zero samples",
+                                          min = 0, max = 20, value = 1), #replace 20 with # samples
+                              
+                              # Action button to trigger plot and table generation
+                              actionButton("countsbutton", "Generate Plots and Tables")),
+                     tabPanel("table", tableOutput("counts_table")),
+                     tabPanel("summary", dataTableOutput("count_summary")),
+                     tabPanel("plots", plotOutput("count_plot"))
+      )
       ),
       tabItem(tabName = "dex",
-              h2("Add Differential Expression")
+              tabBox(title = "Differential Expression",
+                     # The id lets us use input$tabset1 on the server to find the current tab
+                     id = "diff_home", height = "250px",
+                     tabPanel("input", fileInput("dex_file", "Choose CSV File",
+                                                 accept = c(".csv")),
+                              # Dynamic UI for radio buttons
+                              uiOutput("sort_by"),
+                              
+                              # Action button to trigger plot and table generation
+                              actionButton("dexbutton", "View Table")),
+                     tabPanel("table", tableOutput("dex_table")),
+                     tabPanel("assignment7", tableOutput("dex_ass7"))
+                     )
       ),
       tabItem(tabName = "gsea",
-              h2("Add Gene Set Enrichment Analysis")
+              tabBox(title = "Gene Set Enrichment Analysis",
+                     
+                     id = "gsea_home", height = "250px",
+                     tabPanel("input", fileInput("gsea_file", "Choose CSV File",
+                                                 accept = c(".csv")),
+                              
+                              
+                              # Action button to trigger plot and table generation
+                              actionButton("gseabutton", "Create Table and Plots")),
+                     tabPanel("barplot", plotOutput("boxplot")), #add sliders to each tab 
+                     tabPanel("table", tableOutput("gseatable")),
+                     tabPanel("scatter plot", tableOutput("scatter"))
+              )
       )
     )
   )
@@ -71,6 +111,12 @@ server <- function(input, output) {
     data<-read.csv(input$file$datapath)
     return(data)
   })
+  load_counts <- reactive({
+    req(input$counts_file)
+    data<-read.csv(input$counts_file$datapath)
+    return(data)
+  })
+  
   # Dynamic UI for radio buttons
   output$variable1_selector <- renderUI({
     choices <- names(load_data())
@@ -103,7 +149,7 @@ server <- function(input, output) {
   draw_table <- function(dataf, slider) {
       req(dataf)
       
-      # Filter data to rows with p-adjusted values less than 1 * 10^slider
+      # Filter data 
       filtered_data <- dataf[dataf$padj < 10^slider, ]
       
       # Exclude rows with more than one NA value
@@ -116,6 +162,20 @@ server <- function(input, output) {
       filtered_data$padj <- formatC(filtered_data$padj, format = "f", digits = digits_to_display)
       
       return(filtered_data)
+  }
+  counts_table <- function(dataf, var_slider) {
+    req(dataf)
+    
+    # Calculate the variance for each gene, starting from the second column
+    gene_variances <- apply(dataf[, -1], 1, var)
+    
+    # Find genes with non-zero variance
+    nonzero_variance_genes <- gene_variances != 0
+    
+    # Filter the input tibble to keep only genes with non-zero variance
+    filtered_counts <- dataf[nonzero_variance_genes, ]
+    return(filtered_counts)
+    
   }
   
   get_summary <- function(dataf) {
@@ -149,6 +209,8 @@ server <- function(input, output) {
     output$table <- renderTable(draw_table(load_data(), input$slider)) 
     #output$summary <- renderTable(get_summary(load_data(), input$slider))
     output$summary <- renderTable({summary_data <- get_summary(load_data()) })
+    
+    output$counts_table <- renderTable(counts_table(load_counts(), input$var_slider))
 }
 
 shinyApp(ui, server)
