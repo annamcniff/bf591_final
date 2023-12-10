@@ -12,7 +12,8 @@ ui <- dashboardPage(
     menuItem("Sample Information", tabName = "Sample_Information", icon = icon("th")),
     menuItem("Counts Matrix Exploration", tabName = "counts", icon = icon("filter")),
     menuItem("Differential Expression", tabName = "dex", icon = icon("sliders")),
-    menuItem("Gene Set Enrichment Analysis", tabName = "gsea", icon = icon("dna"))
+    menuItem("Gene Set Enrichment Analysis", tabName = "gsea", icon = icon("dna")),
+    menuItem("Individual Gene Expression", tabName = "ige", icon = icon("dna"))
   )),
   dashboardBody(
     tabItems(
@@ -100,10 +101,30 @@ ui <- dashboardPage(
                      tabPanel("table", tableOutput("gseatable")),
                      tabPanel("scatter plot", tableOutput("scatter"))
               )
-      )
+      ),
+      tabItem(tabName = "ige",
+              tabBox(title = "Individual Gene Expression",
+                     
+                     id = "ige_home", height = "250px",
+                     tabPanel("input", fileInput("ige_file1", "Choose CSV File for counts matrix",
+                                                 accept = c(".csv")),
+                     tabPanel("input", fileInput("ige_file2", "Choose CSV File for metadata",
+                                                 accept = c(".csv")),
+                              radioButtons("plot_type", "Plot type:",
+                                           c("Bar Plot" = "bar",
+                                             "Box Plot" = "box",
+                                             "Violin Plot" = "vio",
+                                             "Beeswarm Plot" = "bees")),
+                              
+                              
+                              # Action button to trigger plot and table generation
+                              actionButton("ige_button", "Create Plot")),
+                              plotOutput("distPlot")
+                  
+              ))
     )
   )
-)
+))
 
 server <- function(input, output) {
   load_data <- reactive({
