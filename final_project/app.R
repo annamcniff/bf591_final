@@ -110,13 +110,13 @@ ui <- dashboardPage(
                                                  accept = c(".csv")),
                      tabPanel("input", fileInput("ige_file2", "Choose CSV File for metadata",
                                                  accept = c(".csv")),
+                              textInput("gene_search", "Search for a Gene", placeholder = "gene symbol"), 
                               radioButtons("plot_type", "Plot type:",
                                            c("Bar Plot" = "bar",
                                              "Box Plot" = "box",
                                              "Violin Plot" = "vio",
                                              "Beeswarm Plot" = "bees")),
-                              
-                              
+
                               # Action button to trigger plot and table generation
                               actionButton("ige_button", "Create Plot")),
                               plotOutput("distPlot")
@@ -137,6 +137,10 @@ server <- function(input, output) {
     data<-read.csv(input$counts_file$datapath)
     return(data)
   })
+  read_csv_file <- function(file) {
+    if (is.null(file)) return(NULL)
+    read.csv(file$datapath, header = TRUE, stringsAsFactors = FALSE)
+  }
   
   # Dynamic UI for radio buttons
   output$variable1_selector <- renderUI({
@@ -147,10 +151,19 @@ server <- function(input, output) {
     choices <- names(load_data())
     radioButtons("variable2", "Choose the column for the y-axis", choices, selected = choices[1])
   })
+
+  ige_data1 <- reactive({
+    read_csv_file(input$ige_file1)
+  })
   
+  ige_data2 <- reactive({
+    read_csv_file(input$ige_file2)
+  })
+  
+  #front page filler
   set.seed(122)
   histdata <- rnorm(500)
-  
+  #front page filler
   output$plot1 <- renderPlot({
     data <- histdata[seq_len(input$slider)]
     hist(data)
@@ -217,7 +230,49 @@ server <- function(input, output) {
       return(column_summaries)
     }
     
+  filtered_data <- reactive({
+    gene_search <- input$gene_search
+    if (is.null(gene_search) || gene_search == "") {
+      return(ige_data1())
+    } else {
+      ige_data1() %>% filter(Gene == gene_search)
+    }
+  })
+  
+  # Reactive expression to create the plot based on user input
+  output$distPlot <- renderPlot({
+    req(input$ige_button)
     
+    # Check if any CSV file is selected
+    if (is.null(input$ige_file1) || is.null(input$ige_file2)) {
+      return(NULL)
+    }
+    
+    # Check if the selected gene exists in the data
+    if (nrow(filtered_data()) == 0) {
+      return(NULL)
+    }
+    
+    # Create the plot based on the selected plot type
+    plot_type <- input$plot_type
+    if (plot_type == "bar") {
+      # Code for bar plot
+      # Example: barplot(...)
+    } else if (plot_type == "box") {
+      # Code for box plot
+      # Example: boxplot(...)
+    } else if (plot_type == "vio") {
+      # Code for violin plot
+      # Example: violinplot(...)
+    } else if (plot_type == "bees") {
+      # Code for beeswarm plot
+      # Example: beeswarmplot(...)
+    }
+    
+    # Additional code to customize the plot as needed
+    
+  })
+  
 
     
     #' These outputs aren't really functions, so they don't get a full skeleton, 
