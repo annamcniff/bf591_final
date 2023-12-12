@@ -36,21 +36,12 @@ ui <- dashboardPage(
                 tabPanel("input", fileInput("file", "Choose CSV File",
                                             accept = c(".csv")),
                          
-                         # Dynamic UI for radio buttons
-                         uiOutput("variable1_selector"),
-                         uiOutput("variable2_selector"),
-                         
-                         colourInput("color1", "Select Color for Significant", value = "darkgreen"),
-                         colourInput("color2", "Select Color for Non-Significant", value = "lightgrey"),
-                         
-                         sliderInput("slider", "Magnitude of adjusted p-value",
-                                     min = -300, max = 1, value = 1),
                          
                          # Action button to trigger plot and table generation
                          actionButton("generateBtn", "Generate Plot and Table")),
                 tabPanel("table", tableOutput("table")),
                 tabPanel("summary", dataTableOutput("summary")),
-                tabPanel("plots", plotOutput("volcano"))
+                tabPanel("plots", "add hist")
               )
       ),
       tabItem(tabName = "counts",
@@ -82,9 +73,19 @@ ui <- dashboardPage(
                               uiOutput("sort_by"),
                               
                               # Action button to trigger plot and table generation
-                              actionButton("dexbutton", "View Table")),
+                              actionButton("dexbutton", "Create Table and Plot")),
                      tabPanel("table", tableOutput("dex_table")),
-                     tabPanel("assignment7", tableOutput("dex_ass7"))
+                     tabPanel("volcano plot",  # Dynamic UI for radio buttons
+                              uiOutput("variable1_selector"),
+                              uiOutput("variable2_selector"),
+                              
+                              colourInput("color1", "Select Color for Significant", value = "darkgreen"),
+                              colourInput("color2", "Select Color for Non-Significant", value = "lightgrey"),
+                              
+                              sliderInput("slider", "Magnitude of adjusted p-value",
+                                          min = -300, max = 1, value = -200),
+                              actionButton("countsbutton", "Generate Plot"),
+                              plotOutput("volcano"))
                      )
       ),
       tabItem(tabName = "gsea",

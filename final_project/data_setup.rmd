@@ -16,3 +16,13 @@ age_of_death <- c("age of death: 73", "age of death: 91", "age of death: 82", "a
 metadata_df<- data.frame(Series_sample_id,Sample_title,diagnosis,age_of_death)
 
 ```
+```{r}
+#if (!require("BiocManager", quietly = TRUE))
+#    install.packages("BiocManager")
+#
+#BiocManager::install("bigPint")
+library(bigPint)
+
+data(se_soybean_cn_sub)
+
+```
