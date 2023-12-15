@@ -4,6 +4,8 @@ library(ggplot2)
 library(colourpicker) # you might need to install this
 library(shinydashboard)
 library(DT)
+library(readr)
+library(dplyr)
 
 ui <- dashboardPage(
   dashboardHeader(title = "Basic Bioinformatics App"),
@@ -32,15 +34,13 @@ ui <- dashboardPage(
       tabItem(tabName = "Sample_Information",
               tabBox(title = "Sample Information",
                 # The id lets us use input$tabset1 on the server to find the current tab
-                id = "SIhome", height = "250px",
-                tabPanel("input", fileInput("file", "Choose CSV File",
+                id = "SIhome", height = "250px", width = "80%",
+                tabPanel("input", fileInput("metadata_file", "Choose CSV File",
                                             accept = c(".csv")),
-                         
-                         
                          # Action button to trigger plot and table generation
                          actionButton("generateBtn", "Generate Plot and Table")),
-                tabPanel("table", tableOutput("table")),
-                tabPanel("summary", dataTableOutput("summary")),
+                tabPanel("table", DTOutput("table",width = "80%")),
+                tabPanel("summary",  DTOutput("summary",width = "100%")),
                 tabPanel("plots", "add hist")
               )
       ),
@@ -129,8 +129,9 @@ ui <- dashboardPage(
 
 server <- function(input, output) {
   load_data <- reactive({
-    req(input$file)
-    data<-read.csv(input$file$datapath)
+    #for metadata
+    req(input$metadata_file)
+    data <- read_csv_file(input$metadata_file)
     return(data)
   })
   load_counts <- reactive({
@@ -181,23 +182,12 @@ server <- function(input, output) {
            y = y_name,
            color = y_name)
   }
-  draw_table <- function(dataf, slider) {
-      req(dataf)
-      
-      # Filter data 
-      filtered_data <- dataf[dataf$padj < 10^slider, ]
-      
-      # Exclude rows with more than one NA value
-      filtered_data <- filtered_data[rowSums(is.na(filtered_data)) <= 1, ]
-      
-      # Format p-value and p-adjusted value columns to display more digits
-      digits_to_display <- 10  # You can adjust the number of digits as needed
-      
-      filtered_data$pvalue <- formatC(filtered_data$pvalue, format = "f", digits = digits_to_display)
-      filtered_data$padj <- formatC(filtered_data$padj, format = "f", digits = digits_to_display)
-      
-      return(filtered_data)
+  draw_table <- function(dataf) {
+    data <- req(input$metadata_file)
+    df <- as.data.frame(dataf)
+    return(df)
   }
+  
   counts_table <- function(dataf, var_slider) {
     req(dataf)
     
@@ -214,22 +204,18 @@ server <- function(input, output) {
   }
   
   get_summary <- function(dataf) {
-    req(dataf)
-    dataf <- dataf[complete.cases(dataf), ]
-      num_rows <- nrow(dataf)
-      num_cols <- ncol(dataf)
-      
-      # Get the data types and unique values for each column
-      column_summaries <- lapply(names(dataf), function(col) {
-        col_summary <- c(
-          column_name = col,
-          data_type = typeof(dataf[[col]]),
-          unique_values = unique(dataf[[col]])
-        )
-        return(col_summary)
-      })
-      return(column_summaries)
-    }
+    data <- dataf
+    summary_data <- data %>%
+      group_by(diagnosis) %>%
+      summarise(
+        AvgAgeOfDeath = mean(age_of_death, na.rm = TRUE),
+        AvgAgeOfOnset = mean(age_of_onset, na.rm = TRUE),
+        UniqueDiagnoses = paste(unique(diagnosis), collapse = ", "),
+        DiagnosesCount = as.character(table(diagnosis))
+      ) %>%
+      as.data.frame()
+    return(summary_data)
+  }
     
   filtered_data <- reactive({
     gene_search <- input$gene_search
@@ -283,11 +269,21 @@ server <- function(input, output) {
 
     
     # Same here, just return the table as you want to see it in the web page
-    output$table <- renderTable(draw_table(load_data(), input$slider)) 
-    #output$summary <- renderTable(get_summary(load_data(), input$slider))
-    output$summary <- renderTable({summary_data <- get_summary(load_data()) })
+    output$table <- renderDT(draw_table(load_data())) 
+    
+    summary_data <- reactive({
+      get_summary(load_data())
+    })
+    
+    output$summary <- renderDT({
+      req(summary_data())
+      datatable((summary_data()))
+    })
+
+    
     
     output$counts_table <- renderTable(counts_table(load_counts(), input$var_slider))
+
 }
 
 shinyApp(ui, server)
