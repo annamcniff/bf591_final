@@ -41,7 +41,12 @@ ui <- dashboardPage(
                          actionButton("generateBtn", "Generate Plot and Table")),
                 tabPanel("table", DTOutput("table",width = "80%")),
                 tabPanel("summary",  DTOutput("summary",width = "100%")),
-                tabPanel("plots", "add hist")
+                tabPanel("plots",
+                         selectInput("hist_variable", "Select Variable for Histogram",
+                                     choices = c("age_of_death", "mrna_seq_reads", "pmi", "RIN",
+                                                 "age_of_onset", "cag", "duration", "h_v_cortical_score",
+                                                 "h_v_striatal_score", "vonsattel_grade")),
+                         plotOutput("hist_plot"))
               )
       ),
       tabItem(tabName = "counts",
@@ -261,14 +266,8 @@ server <- function(input, output) {
   })
   
 
-    
-    #' These outputs aren't really functions, so they don't get a full skeleton, 
-    #' but use the renderPlot() and renderTabel() functions to return() a plot 
-    #' or table object, and those will be displayed in your application.
+#METADATA       
     output$volcano <- renderPlot(volcano_plot(load_data(), input$variable1, input$variable2, input$slider, input$color1, input$color2)) 
-
-    
-    # Same here, just return the table as you want to see it in the web page
     output$table <- renderDT(draw_table(load_data())) 
     
     summary_data <- reactive({
@@ -279,9 +278,23 @@ server <- function(input, output) {
       req(summary_data())
       datatable((summary_data()))
     })
+    # Render the histogram plot based on user input
+    output$hist_plot <- renderPlot({
+      req(input$metadata_file, input$hist_variable)
+      
+      # Read the selected CSV file
+      data <- read_csv_file(input$metadata_file)
+      
+      # Create a histogram based on the selected variable and group by diagnosis
+      ggplot(data, aes(x = !!sym(input$hist_variable), fill = diagnosis)) +
+        geom_histogram(binwidth = 1, position = "identity", alpha = 0.7) +
+        labs(title = paste("Histogram of", input$hist_variable),
+             x = input$hist_variable,
+             y = "Frequency",
+             fill = "Diagnosis")
+    })
 
-    
-    
+#COUNTS
     output$counts_table <- renderTable(counts_table(load_counts(), input$var_slider))
 
 }
