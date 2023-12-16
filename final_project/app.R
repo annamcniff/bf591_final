@@ -7,6 +7,11 @@ library(DT)
 library(readr)
 library(dplyr)
 
+read_csv_file <- function(file) {
+  if (is.null(file)) return(NULL)
+  read.csv(file$datapath, header = TRUE, stringsAsFactors = FALSE)
+}
+
 ui <- dashboardPage(
   dashboardHeader(title = "Basic Bioinformatics App"),
   dashboardSidebar(sidebarMenu(
@@ -64,7 +69,6 @@ ui <- dashboardPage(
                               # Action button to trigger plot and table generation
                               actionButton("countsbutton", "Generate Plots and Tables")),
                      tabPanel("table", tableOutput("counts_table")),
-                     tabPanel("summary", dataTableOutput("count_summary")),
                      tabPanel("plots", plotOutput("count_plot"))
       )
       ),
@@ -89,7 +93,7 @@ ui <- dashboardPage(
                               
                               sliderInput("slider", "Magnitude of adjusted p-value",
                                           min = -300, max = 1, value = -200),
-                              actionButton("countsbutton", "Generate Plot"),
+                              actionButton("dexplotbutton", "Generate Plot"),
                               plotOutput("volcano"))
                      )
       ),
@@ -133,6 +137,7 @@ ui <- dashboardPage(
 ))
 
 server <- function(input, output) {
+  options(shiny.maxRequestSize = 30*1024^2)
   load_data <- reactive({
     #for metadata
     req(input$metadata_file)
@@ -141,13 +146,20 @@ server <- function(input, output) {
   })
   load_counts <- reactive({
     req(input$counts_file)
-    data<-read.csv(input$counts_file$datapath)
-    return(data)
+    df <- readr::read_csv(input$counts_file$datapath)
+    
+    # Make 'gene' column character type
+    df$gene <- as.character(df$gene)
+    
+    # Convert all columns except 'gene' to numeric
+    numeric_cols <- sapply(df[-1], as.numeric)
+    df <- cbind(df["gene"], numeric_cols)
+    df <- as.data.frame(df)
+    
+    #print(dim(df))  # Print dimensions of the resulting data frame
+    return(df)
   })
-  read_csv_file <- function(file) {
-    if (is.null(file)) return(NULL)
-    read.csv(file$datapath, header = TRUE, stringsAsFactors = FALSE)
-  }
+  
   
   # Dynamic UI for radio buttons
   output$variable1_selector <- renderUI({
@@ -195,17 +207,18 @@ server <- function(input, output) {
   
   counts_table <- function(dataf, var_slider) {
     req(dataf)
-    
+    #print(dim(dataf))
     # Calculate the variance for each gene, starting from the second column
     gene_variances <- apply(dataf[, -1], 1, var)
     
-    # Find genes with non-zero variance
-    nonzero_variance_genes <- gene_variances != 0
+    # Find genes with non-zero variance and above the specified percentile
+    threshold <- quantile(gene_variances, var_slider / 100)
+    selected_genes <- gene_variances >= threshold
     
-    # Filter the input tibble to keep only genes with non-zero variance
-    filtered_counts <- dataf[nonzero_variance_genes, ]
+    # Filter the input tibble to keep only genes with non-zero variance and above the threshold
+    filtered_counts <- dataf[selected_genes, ]
+    
     return(filtered_counts)
-    
   }
   
   get_summary <- function(dataf) {
@@ -295,8 +308,16 @@ server <- function(input, output) {
     })
 
 #COUNTS
-    output$counts_table <- renderTable(counts_table(load_counts(), input$var_slider))
-
+    #output$counts_table <- renderTable(counts_table(load_counts(), input$var_slider))
+    counts_data <- reactive({
+      counts_table(load_counts(), input$var_slider)
+    })
+    
+    output$counts_table <- renderDT({
+      req(counts_data())
+      print("hello")
+      cat("Filtered Counts Table Dimensions:", dim(counts_data()), "\n")
+      datatable(counts_data())
+    })
 }
-
 shinyApp(ui, server)
