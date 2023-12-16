@@ -64,13 +64,13 @@ ui <- dashboardPage(
                               sliderInput("var_slider", "Minimum percent variance",
                                           min = 0, max = 100, value = 1),
                               sliderInput("non0slider", "Minimum non-zero samples",
-                                          min = 0, max = 20, value = 1), #replace 20 with # samples
+                                          min = 0, max = 70, value = 1), #replace 20 with # samples
                               
                               # Action button to trigger plot and table generation
                               actionButton("countsbutton", "Generate Plots and Tables")),
-                     tabPanel("table", tableOutput("counts_table")),
-                     tabPanel("plots", plotOutput("count_plot"))
-      )
+                     tabPanel("summary", DTOutput("counts_summary_table", width = "100%")),
+                     tabPanel("plots", plotOutput("count_plot_variance"),plotOutput("count_plot_zeros")))
+      
       ),
       tabItem(tabName = "dex",
               tabBox(title = "Differential Expression",
@@ -205,21 +205,32 @@ server <- function(input, output) {
     return(df)
   }
   
-  counts_table <- function(dataf, var_slider) {
+  counts_table <- function(dataf, var_slider,non0slider) {
     req(dataf)
     #print(dim(dataf))
     # Calculate the variance for each gene, starting from the second column
     gene_variances <- apply(dataf[, -1], 1, var)
     
-    # Find genes with non-zero variance and above the specified percentile
-    threshold <- quantile(gene_variances, var_slider / 100)
-    selected_genes <- gene_variances >= threshold
+    # Find genes with non-zero variance and at least non0slider non-zero samples
+    nonzero_variance_genes <- gene_variances != 0
+    non_zero_samples <- apply(dataf[, -1] > 0, 1, sum)
+    non_zero_samples_pass_filter <- non_zero_samples >= non0slider
     
-    # Filter the input tibble to keep only genes with non-zero variance and above the threshold
-    filtered_counts <- dataf[selected_genes, ]
+    # Filter the input tibble to keep only genes with non-zero variance and passing non-zero samples filter
+    filtered_counts <- dataf[nonzero_variance_genes & non_zero_samples_pass_filter, ]
+    
+    # Apply additional filter based on minimum percent variance
+    filtered_counts <- filtered_counts[, c(TRUE, apply(filtered_counts[, -1], 2, function(x) var(x) >= (var_slider/100)))]
     
     return(filtered_counts)
   }
+  # Function to calculate the median count and number of zeros
+  calculate_median_and_zeros <- function(dataf) {
+    median_count <- apply(dataf[, -1], 1, median, na.rm = TRUE)
+    num_zeros <- apply(dataf[, -1] == 0, 1, sum)
+    return(data.frame(Gene = dataf$gene, MedianCount = median_count, NumZeros = num_zeros))
+  }
+  
   
   get_summary <- function(dataf) {
     data <- dataf
@@ -310,14 +321,59 @@ server <- function(input, output) {
 #COUNTS
     #output$counts_table <- renderTable(counts_table(load_counts(), input$var_slider))
     counts_data <- reactive({
-      counts_table(load_counts(), input$var_slider)
+      counts_table(load_counts(), input$var_slider,input$non0slider)
     })
     
-    output$counts_table <- renderDT({
+    output$counts_summary_table <- renderDT({
       req(counts_data())
-      print("hello")
-      cat("Filtered Counts Table Dimensions:", dim(counts_data()), "\n")
-      datatable(counts_data())
+      # Calculate summary statistics
+      total_genes <- nrow(counts_data())
+      passed_filter <- nrow(counts_data())
+      not_passed_filter <- total_genes - passed_filter
+      total_samples <- ncol(counts_data()) - 1  # excluding the 'gene' column
+      
+      # Create a summary data frame
+      summary_data <- data.frame(
+        Metric = c("Total Number of Genes", "Genes Passing Filter", "Genes Not Passing Filter", "Total Number of Samples"),
+        Value = c(total_genes, passed_filter, not_passed_filter, total_samples),
+        Percentage = c(NA, passed_filter / total_genes * 100, not_passed_filter / total_genes * 100, NA)
+      )
+      
+      # Render the summary table
+      datatable(summary_data, options = list(pageLength = 10))
+    })
+    
+    # Plot for median count vs variance
+    output$count_plot_variance <- renderPlot({
+      req(counts_data())
+      
+      # Calculate median and zeros
+      median_data <- calculate_median_and_zeros(counts_data())
+      
+      # Create a plot for Median Count vs Variance
+      ggplot(median_data, aes(x = MedianCount, y = apply(counts_data()[, -1], 1, var), color = NumZeros > 0)) +
+        geom_point() +
+        scale_color_manual(values = c("FALSE" = "lightblue", "TRUE" = "darkblue")) +
+        labs(title = "Median Count vs Variance",
+             x = "Median Count",
+             y = "Variance",
+             color = "Passes Filters")
+    })
+    # Plot for median count vs number of zeros
+    output$count_plot_zeros <- renderPlot({
+      req(counts_data())
+      
+      # Calculate median and zeros
+      median_data <- calculate_median_and_zeros(counts_data())
+      
+      # Create a plot for Median Count vs Number of Zeros
+      ggplot(median_data, aes(x = log(MedianCount), y = NumZeros, color = NumZeros > 0)) +
+        geom_point() +
+        scale_color_manual(values = c("FALSE" = "lightblue", "TRUE" = "darkblue")) +
+        labs(title = "Median Count vs Number of Zeros",
+             x = "Log of Median Count",
+             y = "Number of Zeros",
+             color = "Passes Filters")
     })
 }
 shinyApp(ui, server)
