@@ -6,6 +6,7 @@ library(shinydashboard)
 library(DT)
 library(readr)
 library(dplyr)
+library(pheatmap)
 
 read_csv_file <- function(file) {
   if (is.null(file)) return(NULL)
@@ -69,7 +70,9 @@ ui <- dashboardPage(
                               # Action button to trigger plot and table generation
                               actionButton("countsbutton", "Generate Plots and Tables")),
                      tabPanel("summary", DTOutput("counts_summary_table", width = "100%")),
-                     tabPanel("plots", plotOutput("count_plot_variance"),plotOutput("count_plot_zeros")))
+                     tabPanel("plots", plotOutput("count_plot_variance"),plotOutput("count_plot_zeros")),
+                     tabPanel("heatmap", plotOutput("clustered_heatmap"))
+                     )
       
       ),
       tabItem(tabName = "dex",
@@ -204,7 +207,7 @@ server <- function(input, output) {
     df <- as.data.frame(dataf)
     return(df)
   }
-  
+#COUNTS  
   counts_table <- function(dataf, var_slider,non0slider) {
     req(dataf)
     #print(dim(dataf))
@@ -231,7 +234,20 @@ server <- function(input, output) {
     return(data.frame(Gene = dataf$gene, MedianCount = median_count, NumZeros = num_zeros))
   }
   
+  # Add this reactive expression
+  heatmap_data <- reactive({
+    req(counts_data())
+    
+    # Log-transform counts for visualization
+    log_counts <- log1p(counts_data()[, -1])
+    
+    # Prepare data for heatmap, you may need to customize this based on your data structure
+    heatmap_data <- t(log_counts)
+    
+    return(heatmap_data)
+  })
   
+#METADATA
   get_summary <- function(dataf) {
     data <- dataf
     summary_data <- data %>%
@@ -375,5 +391,24 @@ server <- function(input, output) {
              y = "Number of Zeros",
              color = "Passes Filters")
     })
+    output$clustered_heatmap <- renderPlot({
+      req(heatmap_data())
+      
+      # Create a clustered heatmap
+      pheatmap(
+        heatmap_data(),
+        color = colorRampPalette(c("red", "blue"))(100),
+        cluster_rows = TRUE,
+        cluster_cols = TRUE,
+        main = "Clustered Heatmap",
+        show_colnames = FALSE,
+        fontsize_row = 6,
+        fontsize_col = 8,
+        legend = TRUE
+      )
+    })
+    
 }
+
+
 shinyApp(ui, server)
