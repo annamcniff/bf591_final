@@ -7,6 +7,7 @@ library(DT)
 library(readr)
 library(dplyr)
 library(pheatmap)
+library(plotly)
 
 read_csv_file <- function(file) {
   if (is.null(file)) return(NULL)
@@ -39,20 +40,20 @@ ui <- dashboardPage(
       # Second tab content
       tabItem(tabName = "Sample_Information",
               tabBox(title = "Sample Information",
-                # The id lets us use input$tabset1 on the server to find the current tab
-                id = "SIhome", height = "250px", width = "80%",
-                tabPanel("input", fileInput("metadata_file", "Choose CSV File",
-                                            accept = c(".csv")),
-                         # Action button to trigger plot and table generation
-                         actionButton("generateBtn", "Generate Plot and Table")),
-                tabPanel("table", DTOutput("table",width = "80%")),
-                tabPanel("summary",  DTOutput("summary",width = "100%")),
-                tabPanel("plots",
-                         selectInput("hist_variable", "Select Variable for Histogram",
-                                     choices = c("age_of_death", "mrna_seq_reads", "pmi", "RIN",
-                                                 "age_of_onset", "cag", "duration", "h_v_cortical_score",
-                                                 "h_v_striatal_score", "vonsattel_grade")),
-                         plotOutput("hist_plot"))
+                     # The id lets us use input$tabset1 on the server to find the current tab
+                     id = "SIhome", height = "250px", width = "80%",
+                     tabPanel("input", fileInput("metadata_file", "Choose CSV File",
+                                                 accept = c(".csv")),
+                              # Action button to trigger plot and table generation
+                              actionButton("generateBtn", "Generate Plot and Table")),
+                     tabPanel("table", DTOutput("table", width = "80%")),
+                     tabPanel("summary",  DTOutput("summary", width = "100%")),
+                     tabPanel("plots",
+                              selectInput("hist_variable", "Select Variable for Histogram",
+                                          choices = c("age_of_death", "mrna_seq_reads", "pmi", "RIN",
+                                                      "age_of_onset", "cag", "duration", "h_v_cortical_score",
+                                                      "h_v_striatal_score", "vonsattel_grade")),
+                              plotOutput("hist_plot"))
               )
       ),
       tabItem(tabName = "counts",
@@ -61,20 +62,21 @@ ui <- dashboardPage(
                      id = "Count_home", height = "250px",
                      tabPanel("input", fileInput("counts_file", "Choose CSV File",
                                                  accept = c(".csv")),
-                              
                               sliderInput("var_slider", "Minimum percent variance",
                                           min = 0, max = 100, value = 1),
                               sliderInput("non0slider", "Minimum non-zero samples",
                                           min = 0, max = 70, value = 1), #replace 20 with # samples
-                              
                               # Action button to trigger plot and table generation
                               actionButton("countsbutton", "Generate Plots and Tables")),
                      tabPanel("summary", DTOutput("counts_summary_table", width = "100%")),
-                     tabPanel("plots", plotOutput("count_plot_variance"),plotOutput("count_plot_zeros")),
-                     tabPanel("heatmap", plotOutput("clustered_heatmap"))
-                     )
-      
+                     tabPanel("plots", plotOutput("count_plot_variance"), plotOutput("count_plot_zeros")),
+                     tabPanel("heatmap", plotOutput("clustered_heatmap")),
+                     tabPanel("PCA plot", sliderInput("pca_components", "Top N Principal Components to Plot", min = 1, max = 10, value = 2),
+                              actionButton("pca_button", "Generate PCA Plot"),
+                              plotOutput("pca_plot"))
+              )
       ),
+      
       tabItem(tabName = "dex",
               tabBox(title = "Differential Expression",
                      # The id lets us use input$tabset1 on the server to find the current tab
@@ -83,31 +85,26 @@ ui <- dashboardPage(
                                                  accept = c(".csv")),
                               # Dynamic UI for radio buttons
                               uiOutput("sort_by"),
-                              
                               # Action button to trigger plot and table generation
                               actionButton("dexbutton", "Create Table and Plot")),
                      tabPanel("table", tableOutput("dex_table")),
                      tabPanel("volcano plot",  # Dynamic UI for radio buttons
                               uiOutput("variable1_selector"),
                               uiOutput("variable2_selector"),
-                              
                               colourInput("color1", "Select Color for Significant", value = "darkgreen"),
                               colourInput("color2", "Select Color for Non-Significant", value = "lightgrey"),
-                              
                               sliderInput("slider", "Magnitude of adjusted p-value",
                                           min = -300, max = 1, value = -200),
                               actionButton("dexplotbutton", "Generate Plot"),
                               plotOutput("volcano"))
-                     )
+              )
       ),
+      
       tabItem(tabName = "gsea",
               tabBox(title = "Gene Set Enrichment Analysis",
-                     
                      id = "gsea_home", height = "250px",
                      tabPanel("input", fileInput("gsea_file", "Choose CSV File",
                                                  accept = c(".csv")),
-                              
-                              
                               # Action button to trigger plot and table generation
                               actionButton("gseabutton", "Create Table and Plots")),
                      tabPanel("barplot", plotOutput("boxplot")), #add sliders to each tab 
@@ -115,29 +112,28 @@ ui <- dashboardPage(
                      tabPanel("scatter plot", tableOutput("scatter"))
               )
       ),
+      
       tabItem(tabName = "ige",
               tabBox(title = "Individual Gene Expression",
-                     
                      id = "ige_home", height = "250px",
                      tabPanel("input", fileInput("ige_file1", "Choose CSV File for counts matrix",
                                                  accept = c(".csv")),
-                     tabPanel("input", fileInput("ige_file2", "Choose CSV File for metadata",
-                                                 accept = c(".csv")),
-                              textInput("gene_search", "Search for a Gene", placeholder = "gene symbol"), 
-                              radioButtons("plot_type", "Plot type:",
-                                           c("Bar Plot" = "bar",
-                                             "Box Plot" = "box",
-                                             "Violin Plot" = "vio",
-                                             "Beeswarm Plot" = "bees")),
-
-                              # Action button to trigger plot and table generation
-                              actionButton("ige_button", "Create Plot")),
+                              tabPanel("input", fileInput("ige_file2", "Choose CSV File for metadata",
+                                                          accept = c(".csv")),
+                                       textInput("gene_search", "Search for a Gene", placeholder = "gene symbol"), 
+                                       radioButtons("plot_type", "Plot type:",
+                                                    c("Bar Plot" = "bar",
+                                                      "Box Plot" = "box",
+                                                      "Violin Plot" = "vio",
+                                                      "Beeswarm Plot" = "bees")),
+                                       # Action button to trigger plot and table generation
+                                       actionButton("ige_button", "Create Plot")),
                               plotOutput("distPlot")
-                  
-              ))
-    )
-  )
-))
+                     )
+              )
+      )
+    ))
+)
 
 server <- function(input, output) {
   options(shiny.maxRequestSize = 30*1024^2)
@@ -147,6 +143,8 @@ server <- function(input, output) {
     data <- read_csv_file(input$metadata_file)
     return(data)
   })
+  
+  #COUNTS
   load_counts <- reactive({
     req(input$counts_file)
     df <- readr::read_csv(input$counts_file$datapath)
@@ -247,6 +245,22 @@ server <- function(input, output) {
     return(heatmap_data)
   })
   
+  perform_pca <- function(counts_data) {
+    # Extract gene names and counts
+    genes <- counts_data$gene
+    counts <- as.matrix(counts_data[, -1])  # Exclude the 'gene' column
+    
+    # Perform PCA
+    pca_result <- prcomp(counts, scale. = TRUE, center = TRUE)
+    
+    # Return a list with PCA results
+    return(list(
+      x = pca_result$x,      # PCA scores
+      sdev = pca_result$sdev  # Standard deviations of principal components
+    ))
+  }
+  
+  
 #METADATA
   get_summary <- function(dataf) {
     data <- dataf
@@ -339,6 +353,10 @@ server <- function(input, output) {
     counts_data <- reactive({
       counts_table(load_counts(), input$var_slider,input$non0slider)
     })
+    # Perform PCA (replace with your actual PCA function)
+    pca_results <- reactive({
+      perform_pca(load_counts())
+    })
     
     output$counts_summary_table <- renderDT({
       req(counts_data())
@@ -397,7 +415,7 @@ server <- function(input, output) {
       # Create a clustered heatmap
       pheatmap(
         heatmap_data(),
-        color = colorRampPalette(c("red", "blue"))(100),
+        color = colorRampPalette(c("yellow", "blue"))(100),
         cluster_rows = TRUE,
         cluster_cols = TRUE,
         main = "Clustered Heatmap",
@@ -407,8 +425,32 @@ server <- function(input, output) {
         legend = TRUE
       )
     })
+    pca_results <- reactive({
+      # Generate a subset of the counts data
+      test_counts_data <- subset(load_counts(), select = c("gene", "C_0002", "C_0003", "C_0004"))
+      
+      # Perform PCA on the subset
+      perform_pca(test_counts_data)
+    })
     
+    # Render the PCA scatter plot
+    output$pca_plot <- renderPlotly({
+      req(pca_results())
+      
+      # Extract the selected number of principal components
+      top_components <- pca_results()$x[, 1:input$pca_components]
+      
+      # Use plot_ly for an interactive plot
+      plot_ly(x = ~top_components[, 1], y = ~top_components[, 2], type = "scatter",
+              mode = "markers", marker = list(color = "darkblue", size = 10),
+              text = ~paste("PC1: ", round(top_components[, 1], 2), "<br>PC2: ", round(top_components[, 2], 2))) %>%
+        layout(title = "PCA Scatter Plot",
+               xaxis = list(title = paste("PC1 (", round(pca_results()$sdev[1]^2 / sum(pca_results()$sdev^2) * 100, 2), "%)")),
+               yaxis = list(title = paste("PC2 (", round(pca_results()$sdev[2]^2 / sum(pca_results()$sdev^2) * 100, 2), "%)")))
+    })
+
 }
 
 
 shinyApp(ui, server)
+
