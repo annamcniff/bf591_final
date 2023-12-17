@@ -79,24 +79,24 @@ ui <- dashboardPage(
       
       tabItem(tabName = "dex",
               tabBox(title = "Differential Expression",
-                     # The id lets us use input$tabset1 on the server to find the current tab
                      id = "diff_home", height = "250px",
                      tabPanel("input", fileInput("dex_file", "Choose CSV File",
                                                  accept = c(".csv")),
                               # Dynamic UI for radio buttons
                               uiOutput("sort_by"),
-                              # Action button to trigger plot and table generation
+                              # Gene symbol search input
+                              textInput("gene_symbol_search", "Search by Gene Symbol", ""),
+                              # Action button to trigger table and volcano plot generation
                               actionButton("dexbutton", "Create Table and Plot")),
-                     tabPanel("table", tableOutput("dex_table")),
-                     tabPanel("volcano plot",  # Dynamic UI for radio buttons
-                              uiOutput("variable1_selector"),
+                     tabPanel("table", DTOutput("dex_table")),
+                     tabPanel("volcano plot",
                               uiOutput("variable2_selector"),
-                              colourInput("color1", "Select Color for Significant", value = "darkgreen"),
+                              colourInput("color1", "Select Color for Significant", value = "hotpink"),
                               colourInput("color2", "Select Color for Non-Significant", value = "lightgrey"),
                               sliderInput("slider", "Magnitude of adjusted p-value",
                                           min = -300, max = 1, value = -200),
                               actionButton("dexplotbutton", "Generate Plot"),
-                              plotOutput("volcano"))
+                              plotOutput("dex_volcano"))
               )
       ),
       
@@ -447,6 +447,51 @@ server <- function(input, output) {
         layout(title = "PCA Scatter Plot",
                xaxis = list(title = paste("PC1 (", round(pca_results()$sdev[1]^2 / sum(pca_results()$sdev^2) * 100, 2), "%)")),
                yaxis = list(title = paste("PC2 (", round(pca_results()$sdev[2]^2 / sum(pca_results()$sdev^2) * 100, 2), "%)")))
+    })
+    
+#DEX 
+    dex_data <- reactive({
+      req(input$dex_file)
+      read_csv_file(input$dex_file)
+    })
+    
+    # Dynamic UI for sorting options
+    output$sort_by <- renderUI({
+      req(dex_data())
+      choices <- names(dex_data())
+      radioButtons("sort_by_column", "Sort by:", choices, selected = choices[1])
+    })
+    
+    # Filtered data based on gene symbol search
+    filtered_dex_data <- reactive({
+      gene_search <- input$gene_symbol_search
+      if (is.null(gene_search) || gene_search == "") {
+        return(dex_data())
+      } else {
+        dex_data() %>% filter(symbol == gene_search)
+      }
+    })
+    
+    # Render the table based on filtered data
+    output$dex_table <- renderDT({
+      req(dex_data(), input$sort_by_column)
+      datatable(filtered_dex_data() %>% arrange(!!sym(input$sort_by_column)))
+    })
+    output$dex_volcano <- renderPlot({
+      req(input$dexbutton, input$dex_file)
+      
+      # Read the selected CSV file
+      dataf <- read_csv_file(input$dex_file)
+      
+      # Create the Volcano Plot based on "padj" and "log2FoldChange"
+      ggplot(dataf, aes(x = log2FoldChange, y = -log10(padj), color = padj < 10^input$slider)) +
+        geom_point(size = 3) +
+        scale_color_manual(values = c(input$color1, input$color2), breaks = c(TRUE, FALSE),
+                           labels = c("significant", "not significant")) +
+        labs(title = "Volcano Plot",
+             x = "log2FoldChange",
+             y = "padj",
+             color = "padj")
     })
 
 }
