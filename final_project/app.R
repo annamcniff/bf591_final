@@ -120,6 +120,8 @@ ui <- dashboardPage(
                                                  accept = c(".csv")),
                               tabPanel("input", fileInput("ige_file2", "Choose CSV File for metadata",
                                                           accept = c(".csv")),
+                                       # Input control to choose a categorical field
+                                       selectInput("categorical_field", "Choose Categorical Field", ""),
                                        textInput("gene_search", "Search for a Gene", placeholder = "gene symbol"), 
                                        radioButtons("plot_type", "Plot type:",
                                                     c("Bar Plot" = "bar",
@@ -283,40 +285,6 @@ server <- function(input, output) {
     } else {
       ige_data1() %>% filter(Gene == gene_search)
     }
-  })
-  
-  # Reactive expression to create the plot based on user input
-  output$distPlot <- renderPlot({
-    req(input$ige_button)
-    
-    # Check if any CSV file is selected
-    if (is.null(input$ige_file1) || is.null(input$ige_file2)) {
-      return(NULL)
-    }
-    
-    # Check if the selected gene exists in the data
-    if (nrow(filtered_data()) == 0) {
-      return(NULL)
-    }
-    
-    # Create the plot based on the selected plot type
-    plot_type <- input$plot_type
-    if (plot_type == "bar") {
-      # Code for bar plot
-      # Example: barplot(...)
-    } else if (plot_type == "box") {
-      # Code for box plot
-      # Example: boxplot(...)
-    } else if (plot_type == "vio") {
-      # Code for violin plot
-      # Example: violinplot(...)
-    } else if (plot_type == "bees") {
-      # Code for beeswarm plot
-      # Example: beeswarmplot(...)
-    }
-    
-    # Additional code to customize the plot as needed
-    
   })
   
 
@@ -493,7 +461,101 @@ server <- function(input, output) {
              y = "padj",
              color = "padj")
     })
-
+#IGE 
+    observe({
+      req(load_data())  
+      # Extract column names from the loaded sample information matrix
+      col_names <- colnames(load_data())
+      
+      # Update the choices for the selectInput
+      updateSelectInput(session, "categorical_field", choices = col_names, selected = col_names[1])
+    })
+    
+    output$distPlot <- renderPlot({
+      req(input$ige_button, input$ige_file1, input$ige_file2, input$gene_search, input$plot_type)
+      
+      # Read the counts matrix file
+      counts_data <- read_csv_file(input$ige_file1)
+      
+      # Read the sample information file
+      metadata <- read_csv_file(input$ige_file2)
+      
+      # Filter counts matrix for the selected gene
+      selected_gene <- input$gene_search
+      filtered_counts <- counts_data %>%
+        filter(gene == selected_gene)
+      
+      if (nrow(filtered_counts) == 0) {
+        # Gene not found, return NULL or show an error message
+        return(NULL)
+      }
+      # Extract relevant columns
+      sample_col <- input$sample_variable  # replace with your actual variable selection
+      plot_type <- input$plot_type
+      
+      # Perform the requested plot type
+      if (plot_type == "bar") {
+        # Bar Plot
+        ggplot(filtered_counts, aes(x = !!sym(sample_col), y = counts, fill = !!sym(sample_col))) +
+          geom_bar(stat = "identity") +
+          labs(title = paste("Bar Plot for Gene: ", selected_gene),
+               x = sample_col,
+               y = "Count",
+               fill = sample_col)
+      } else if (plot_type == "box") {
+        # Box Plot
+        ggplot(filtered_counts, aes(x = !!sym(sample_col), y = counts, fill = !!sym(sample_col))) +
+          geom_boxplot() +
+          labs(title = paste("Box Plot for Gene: ", selected_gene),
+               x = sample_col,
+               y = "Count",
+               fill = sample_col)
+      } else if (plot_type == "vio") {
+        # Violin Plot
+        ggplot(filtered_counts, aes(x = !!sym(sample_col), y = counts, fill = !!sym(sample_col))) +
+          geom_violin() +
+          labs(title = paste("Violin Plot for Gene: ", selected_gene),
+               x = sample_col,
+               y = "Count",
+               fill = sample_col)
+      } else if (plot_type == "bees") {
+        # Beeswarm Plot
+        ggplot(filtered_counts, aes(x = !!sym(sample_col), y = counts, color = !!sym(sample_col))) +
+          geom_beeswarm() +
+          labs(title = paste("Beeswarm Plot for Gene: ", selected_gene),
+               x = sample_col,
+               y = "Count",
+               color = sample_col)
+      }
+    })
+    # Additional controls for the Individual Gene Expression tab
+    output$sample_variable_selector <- renderUI({
+      req(input$ige_file2)
+      choices <- names(read_csv_file(input$ige_file2))
+      radioButtons("sample_variable", "Choose sample variable", choices, selected = choices[1])
+    })
+    
+    # Updated input section in the UI
+    tabPanel(
+      "input",
+      fileInput("ige_file1", "Choose CSV File for counts matrix", accept = c(".csv")),
+      fileInput("ige_file2", "Choose CSV File for metadata", accept = c(".csv")),
+      textInput("gene_search", "Search for a Gene", placeholder = "gene symbol"),
+      radioButtons("sample_variable_selector", "Choose sample variable", choices = ""),
+      radioButtons("plot_type", "Plot type:",
+                   c("Bar Plot" = "bar",
+                     "Box Plot" = "box",
+                     "Violin Plot" = "vio",
+                     "Beeswarm Plot" = "bees")),
+      actionButton("ige_button", "Create Plot")
+    )
+    
+    # Additional controls for the Individual Gene Expression tab
+    output$sample_variable_selector <- renderUI({
+      req(input$ige_file2)
+      choices <- names(read_csv_file(input$ige_file2))
+      radioButtons("sample_variable", "Choose sample variable", choices, selected = choices[1])
+    })
 }
 
 
